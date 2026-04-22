@@ -84,6 +84,7 @@ const Main: FC<IMainProps> = () => {
 
   const [conversationIdChangeBecauseOfNew, setConversationIdChangeBecauseOfNew, getConversationIdChangeBecauseOfNew] = useGetState(false)
   const [isChatStarted, { setTrue: setChatStarted, setFalse: setChatNotStarted }] = useBoolean(false)
+  const [debugConversationId, setDebugConversationId] = useState('')
   const handleStartChat = (inputs: Record<string, any>) => {
     createNewChat()
     setConversationIdChangeBecauseOfNew(true)
@@ -172,6 +173,7 @@ const Main: FC<IMainProps> = () => {
   * chat info. chat is under conversation.
   */
   const [chatList, setChatList, getChatList] = useGetState<ChatItem[]>([])
+  const reportedConversationIdsRef = useRef(new Set<string>())
   const chatListDomRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     // scroll to bottom with page-level scrolling
@@ -307,7 +309,7 @@ const Main: FC<IMainProps> = () => {
     let emptyRequiredInput = false
     promptConfig.prompt_variables.forEach((item) => {
       if (item.required && !currInputs[item.key])
-        emptyRequiredInput = true
+      { emptyRequiredInput = true }
     })
 
     if (emptyRequiredInput) {
@@ -354,6 +356,16 @@ const Main: FC<IMainProps> = () => {
       url: fileItem.url,
       upload_file_id: fileItem.id,
     }
+  }
+
+  const notifyParentConversationCreated = (conversationId: string) => {
+    if (!conversationId || reportedConversationIdsRef.current.has(conversationId)) { return }
+
+    reportedConversationIdsRef.current.add(conversationId)
+    globalThis.parent?.postMessage({
+      type: 'dify-conversation-created',
+      conversationId,
+    }, '*')
   }
 
   const handleSend = async (message: string, files?: VisionFile[]) => {
@@ -443,7 +455,12 @@ const Main: FC<IMainProps> = () => {
           hasSetResponseId = true
         }
 
-        if (isFirstMessage && newConversationId) { tempNewConversationId = newConversationId }
+        if (isFirstMessage && newConversationId) {
+          tempNewConversationId = newConversationId
+          setDebugConversationId(newConversationId)
+          console.log('new conversationId:', newConversationId)
+          notifyParentConversationCreated(newConversationId)
+        }
 
         setMessageTaskId(taskId)
         // has switched to other conversation
@@ -654,6 +671,11 @@ const Main: FC<IMainProps> = () => {
 
   return (
     <div className='bg-gray-100'>
+      {debugConversationId && (
+        <div className='px-4 py-2 text-sm text-blue-600 bg-blue-50 border-b border-blue-200'>
+          Debug conversationId: {debugConversationId}
+        </div>
+      )}
       <Header
         title={APP_INFO.title}
         isMobile={isMobile}
